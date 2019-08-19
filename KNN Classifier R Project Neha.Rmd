@@ -1,0 +1,536 @@
+---
+title: "KNN Classifier R Project"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### KNN CLASSIFICATION WITHOUT NORMALIZATION
+
+### Reading the data
+
+```{r}
+rm(list=ls())
+library(tinytex)
+setwd("C:/Users/nehaa/Documents/R/Data")
+credit_default1=read.csv('cleansed_data.csv',header=T)
+credit_default1=credit_default1[-1]
+attach(credit_default1)
+summary(credit_default1)
+names(credit_default1)
+dim(credit_default1)
+```
+### Converting categorical variables 
+```{r}
+factor_vars1 = c(2, 3, 4, 24, c(6:11))
+for (i in factor_vars1) {
+credit_default1[[i]]<-as.factor(credit_default1[[i]])
+}
+summary(credit_default1)
+```
+### Splitting the data
+
+```{r}
+library(kknn)
+library(class)
+set.seed(33) 
+tr1 = sample(c(1:dim(credit_default1)[1]), 20000)
+train1 = credit_default1[tr1,]
+test1 = credit_default1[-tr1,]
+y_train1=credit_default1[tr1,24]
+y_test1=credit_default1[-tr1,24]
+```
+
+### KNN using out of sample predictions for k=50
+```{r}
+set.seed(33)
+library(caret)
+library(precrec)
+library(ROCit)
+library(plotROC)
+library(ggplot2)
+
+knn1=knn(train1,test1,cl=y_train1,k=50,prob=FALSE,use.all=FALSE)
+knn1_table=table(knn1,y_test1)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+
+x=accuracy(knn1_table)
+precision=posPredValue(knn1,y_test1,positive='1')
+recall=sensitivity(knn1,y_test1,positive = '1')
+F1=(2*precision*recall)/(precision+recall)
+
+print(knn1_table)
+cat("Accuracy is",x,"and misclassification rate is",100-x)
+cat("Precision is",precision,"and Recall is",recall)
+cat("F1 score is",F1)
+precrec_obj <- evalmod(scores = as.numeric(knn1), labels = y_test1)
+autoplot(precrec_obj)
+```
+### Finding the best k value
+```{r}
+set.seed(33)
+tr1 = sample(c(1:dim(credit_default1)[1]), 20000)
+train1 = credit_default1[tr1,]
+test1 = credit_default1[-tr1,]
+y_train1=credit_default1[tr1,24]
+y_test1=credit_default1[-tr1,24]
+k_list1=c(50,100,150,200)
+k_list1
+y=NULL
+for(i in k_list1){
+  knn2 = knn(train1,test1,cl=y_train1,k=i)
+  knn2_table=table(knn2,y_test1) 
+  
+  x=accuracy(knn2_table)
+  precision=posPredValue(knn2,y_test1,positive='1')
+  recall=sensitivity(knn2,y_test1,positive = '1')
+  F1=(2*precision*recall)/(precision+recall)
+  
+  x1=100-x
+  y=c(y,x1)
+}
+best = which.min(y)
+plot(k_list1,y,type="b",xlab="K Value",col="blue",ylab="Misclassification rate",lwd=2,cex.lab=1.2)
+cat("Best k value is",k_list1[best],"with misclassification rate of",y[best])
+precrec_obj <- evalmod(scores = as.numeric(knn2), labels = y_test1)
+autoplot(precrec_obj)
+```
+### K fold cross validation with kcv=10
+```{r}
+set.seed(33)
+train1 = credit_default1
+test1 = credit_default1
+y_train1=credit_default1[tr1,24]
+y_test1=credit_default1[-tr1,24]
+n=dim(credit_default1)[1]
+k_list1=c(20,50,100,150,200,250)
+kcv = 10
+n0 = round(n/kcv,0)
+set=1:n
+used = NULL
+y1=matrix(0,kcv,6)
+y2=matrix(0,kcv,6)
+y3=matrix(0,kcv,6)
+for(j in 1:kcv){
+  if(n0<length(set)){val = sample(set,n0)}
+  if(n0>=length(set)){val=set}
+    train_i = train1[-val,]
+    test_i = test1[val,]
+    y_train_i=credit_default1[-val,24]
+    y_test_i=credit_default1[val,24]
+    for(i in 1:6){
+     knn3 = knn(train_i,test_i,cl=y_train_i,k=k_list1[i])
+     knn3_table=table(knn3,y_test_i)
+     x1=accuracy(knn3_table)
+     x2=100-x1
+     precision=posPredValue(knn3,y_test_i,positive='1')
+     recall=sensitivity(knn3,y_test_i,positive = '1')
+     F1=(2*precision*recall)/(precision+recall)
+     
+     cat(x2,"for k value",k_list1[i],"and fold",j)
+     y1[j,i]=x2
+     y2[j,i]=precision
+     y3[j,i]=recall
+    }
+  used = union(used,val)
+  set = (1:n)[-used]
+  cat(j,'\n')
+}  
+my1=apply(y1,2,mean)
+my2=apply(y2,2,mean)
+my3=apply(y3,2,mean)
+cat("Misclassification rate values:",my1)
+cat("Precision values:",my2)
+cat("Recall values:",my3)
+best = which.min(my1)
+plot(k_list1,my1,xlab="K value",ylab="Misclassification rate",col=4,lwd=2,type="l",cex.lab=1.2,main=paste("kfold(",kcv,")"))
+cat("Best k value is",k_list1[best],"with misclassification rate of",my1[best])
+```
+### K fold cross validation with kcv=5
+```{r}
+set.seed(33)
+train1 = credit_default1
+test1 = credit_default1
+y_train1=credit_default1[tr1,24]
+y_test1=credit_default1[-tr1,24]
+n=dim(credit_default1)[1]
+k_list1=c(20,50,100,150,200,250)
+kcv = 5
+n0 = round(n/kcv,0)
+set=1:n
+used = NULL
+y1=matrix(0,kcv,6)
+y2=matrix(0,kcv,6)
+y3=matrix(0,kcv,6)
+for(j in 1:kcv){
+  if(n0<length(set)){val = sample(set,n0)}
+  if(n0>=length(set)){val=set}
+    train_i = train1[-val,]
+    test_i = test1[val,]
+    y_train_i=credit_default1[-val,24]
+    y_test_i=credit_default1[val,24]
+    for(i in 1:6){
+     knn4 = knn(train_i,test_i,cl=y_train_i,k=k_list1[i])
+     knn4_table=table(knn4,y_test_i)
+     x1=accuracy(knn4_table)
+     x2=100-x1
+     precision=posPredValue(knn4,y_test_i,positive='1')
+     recall=sensitivity(knn4,y_test_i,positive = '1')
+     F1=(2*precision*recall)/(precision+recall)
+     
+     cat(x2,"for k value",k_list1[i],"and fold",j)
+     y1[j,i]=x2
+     y2[j,i]=precision
+     y3[j,i]=recall
+    }
+  used = union(used,val)
+  set = (1:n)[-used]
+  cat(j,'\n')
+}  
+my1=apply(y1,2,mean)
+my2=apply(y2,2,mean)
+my3=apply(y3,2,mean)
+cat("Misclassification rate values:",my1)
+cat("Precision values:",my2)
+cat("Recall values:",my3)
+best = which.min(my1)
+plot(k_list1,my1,xlab="K value",ylab="Misclassification rate",col=4,lwd=2,type="l",cex.lab=1.2,main=paste("kfold(",kcv,")"))
+cat("Best k value is",k_list1[best],"with misclassification rate of",my1[best])
+```
+### KNN CLASSIFICATION WITH NORMALIZATION
+
+### Reading the data
+
+```{r}
+rm(list=ls())
+setwd("C:/Users/nehaa/Documents/R/Data")
+credit_default2=read.csv('cleansed_data.csv',header=T)
+credit_default2=credit_default2[-1]
+attach(credit_default2)
+summary(credit_default2)
+names(credit_default2)
+dim(credit_default2)
+```
+### Converting categorical variables 
+```{r}
+factor_vars2 = c(2, 3, 4, 24, c(6:11))
+for (i in factor_vars2) {
+credit_default2[[i]]<-as.factor(credit_default2[[i]])
+}
+summary(credit_default2)
+```
+
+
+### Normalization
+```{r}
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x))) }
+normalize_vars=c(1,5,c(12:23))
+for (i in normalize_vars) {
+credit_default2[[i]]=normalize(credit_default2[[i]])
+}
+summary(credit_default2)
+```
+
+### Splitting the data
+
+```{r}
+library(kknn)
+library(class)
+set.seed(33) 
+tr2 = sample(c(1:dim(credit_default2)[1]), 20000)
+train2 = credit_default2[tr2,]
+test2 = credit_default2[-tr2,]
+y_train2=credit_default2[tr2,24]
+y_test2=credit_default2[-tr2,24]
+```
+
+### KNN using out of sample predictions for k=50
+```{r}
+set.seed(33)
+knn5=knn(train2,test2,cl=y_train2,k=50,prob=FALSE,use.all=FALSE)
+knn5_table=table(knn5,y_test2)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+
+x=accuracy(knn5_table)
+precision=posPredValue(knn5,y_test2,positive='1')
+recall=sensitivity(knn5,y_test2,positive = '1')
+F1=(2*precision*recall)/(precision+recall)
+
+print(knn5_table)
+cat("Accuracy is",x,"and misclassification rate is",100-x)
+cat("Precision is",precision,"and Recall is",recall)
+cat("F1 score is",F1)
+precrec_obj <- evalmod(scores = as.numeric(knn5), labels = y_test2)
+autoplot(precrec_obj)
+```
+
+### Finding the best k value
+```{r}
+set.seed(33)
+tr2 = sample(c(1:dim(credit_default2)[1]), 20000)
+train2 = credit_default2[tr2,]
+test2 = credit_default2[-tr2,]
+y_train2=credit_default2[tr2,24]
+y_test2=credit_default2[-tr2,24]
+k_list2=c(5,10,15,20,50,100)
+k_list2
+y=NULL
+for(i in k_list2){
+  knn6 = knn(train2,test2,cl=y_train2,k=i)
+  knn6_table=table(knn6,y_test2) 
+  x=accuracy(knn6_table)
+  precision=posPredValue(knn6,y_test2,positive='1')
+  recall=sensitivity(knn6,y_test2,positive = '1')
+  F1=(2*precision*recall)/(precision+recall)
+  
+  x1=100-x
+  y=c(y,x1)
+}
+best = which.min(y)
+plot(k_list2,y,type="b",xlab="K Value",col="blue", ylab="Misclassification rate",lwd=2,cex.lab=1.2)
+cat("Best k value is",k_list2[best],"with misclassification rate of",y[best])
+precrec_obj <- evalmod(scores = as.numeric(knn6), labels = y_test2)
+autoplot(precrec_obj)
+```
+
+### K fold cross validation with kcv=10
+```{r}
+set.seed(33)
+train2 = credit_default2
+test2 = credit_default2
+y_train2=credit_default2[tr2,24]
+y_test2=credit_default2[-tr2,24]
+n=dim(credit_default2)[1]
+k_list2=c(5,10,20,50,100,150)
+kcv = 10
+n0 = round(n/kcv,0)
+set=1:n
+used = NULL
+y1=matrix(0,kcv,6)
+y2=matrix(0,kcv,6)
+y3=matrix(0,kcv,6)
+for(j in 1:kcv){
+  if(n0<length(set)){val = sample(set,n0)}
+  if(n0>=length(set)){val=set}
+    train_i = train2[-val,]
+    test_i = test2[val,]
+    y_train_i=credit_default2[-val,24]
+    y_test_i=credit_default2[val,24]
+    for(i in 1:6){
+     knn7 = knn(train_i,test_i,cl=y_train_i,k=k_list2[i])
+     knn7_table=table(knn7,y_test_i)
+     
+     x1=accuracy(knn7_table)
+     x2=100-x1
+     precision=posPredValue(knn7,y_test_i,positive='1')
+     recall=sensitivity(knn7,y_test_i,positive = '1')
+     F1=(2*precision*recall)/(precision+recall)
+     
+     cat(x2,"for k value",k_list2[i],"and fold",j)
+     y1[j,i]=x2
+     y2[j,i]=precision
+     y3[j,i]=recall
+    }
+  used = union(used,val)
+  set = (1:n)[-used]
+  cat(j,'\n')
+}  
+my1=apply(y1,2,mean)
+my2=apply(y2,2,mean)
+my3=apply(y3,2,mean)
+cat("Misclassification rate values:",my1)
+cat("Precision values:",my2)
+cat("Recall values:",my3)
+best = which.min(my1)
+plot(k_list2,my1,xlab="K value",ylab="Misclassification rate",col=4,lwd=2,type="l",cex.lab=1.2,main=paste("kfold(",kcv,")"))
+cat("Best k value is",k_list2[best],"with misclassification rate of",my1[best])
+```
+### K fold cross validation with kcv=5
+```{r}
+set.seed(33)
+train2 = credit_default2
+test2 = credit_default2
+y_train2=credit_default2[tr2,24]
+y_test2=credit_default2[-tr2,24]
+n=dim(credit_default2)[1]
+k_list2=c(5,10,20,50,100,150)
+kcv = 5
+n0 = round(n/kcv,0)
+set=1:n
+used = NULL
+y1=matrix(0,kcv,6)
+y2=matrix(0,kcv,6)
+y3=matrix(0,kcv,6)
+for(j in 1:kcv){
+  if(n0<length(set)){val = sample(set,n0)}
+  if(n0>=length(set)){val=set}
+    train_i = train2[-val,]
+    test_i = test2[val,]
+    y_train_i=credit_default2[-val,24]
+    y_test_i=credit_default2[val,24]
+    for(i in 1:6){
+     knn7 = knn(train_i,test_i,cl=y_train_i,k=k_list2[i])
+     knn7_table=table(knn7,y_test_i)
+     
+     x1=accuracy(knn7_table)
+     x2=100-x1
+     precision=posPredValue(knn7,y_test_i,positive='1')
+     recall=sensitivity(knn7,y_test_i,positive = '1')
+     F1=(2*precision*recall)/(precision+recall)
+     
+     cat(x2,"for k value",k_list2[i],"and fold",j)
+     y1[j,i]=x2
+     y2[j,i]=precision
+     y3[j,i]=recall
+    }
+  used = union(used,val)
+  set = (1:n)[-used]
+  cat(j,'\n')
+}  
+my1=apply(y1,2,mean)
+my2=apply(y2,2,mean)
+my3=apply(y3,2,mean)
+cat("Misclassification rate values:",my1)
+cat("Precision values:",my2)
+cat("Recall values:",my3)
+best = which.min(my1)
+plot(k_list2,my1,xlab="K value",ylab="Misclassification rate",col=4,lwd=2,type="l",cex.lab=1.2,main=paste("kfold(",kcv,")"))
+cat("Best k value is",k_list2[best],"with misclassification rate of",my1[best])
+```
+
+
+### KNN with normalization and SMOTE
+
+### Reading the data
+
+```{r}
+rm(list=ls())
+setwd("C:/Users/nehaa/Documents/R/Data")
+credit_default3=read.csv('cleansed_data.csv',header=T)
+credit_default3=credit_default3[-1]
+attach(credit_default3)
+summary(credit_default3)
+names(credit_default3)
+dim(credit_default3)
+```
+
+### Converting categorical variables 
+```{r}
+factor_vars3 = c(2, 3, 4, 24, c(6:11))
+for (i in factor_vars3) {
+credit_default3[[i]]<-as.factor(credit_default3[[i]])
+}
+summary(credit_default3)
+```
+### Normalization
+```{r}
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x))) }
+normalize_vars=c(1,5,c(12:23))
+for (i in normalize_vars) {
+credit_default3[[i]]=normalize(credit_default3[[i]])
+}
+summary(credit_default3)
+```
+### Splitting the data
+
+```{r}
+library(kknn)
+library(class)
+set.seed(33) 
+tr3 = sample(c(1:dim(credit_default3)[1]), 20000)
+train3 = credit_default3[tr3,]
+test3 = credit_default3[-tr3,]
+y_train3=credit_default3[tr3,24]
+y_test3=credit_default3[-tr3,24]
+prop.table(table(y_test3))
+```
+
+```{r}
+library(DMwR)
+library(dplyr)
+train3$def_pay <- as.factor(train3$def_pay)
+train3 <- SMOTE(train3$def_pay ~ ., train3, perc.over = 100, perc.under=200)
+train3$def_pay <- as.numeric(train3$def_pay)
+train3$def_pay=ifelse(train3$def_pay==2,1,0)
+prop.table(table(train3$def_pay))
+```
+
+```{r}
+library(caret)
+library(precrec)
+library(ROCit)
+library(plotROC)
+library(ggplot2)
+
+set.seed(33)
+knn9=knn(train3,test3,cl=train3$def_pay,k=50,prob=FALSE,use.all=FALSE)
+knn9_table=table(knn9,y_test3)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+
+x=accuracy(knn9_table)
+precision=posPredValue(knn9,test3$def_pay,positive='1')
+recall=sensitivity(knn9,test3$def_pay,positive = '1')
+F1=(2*precision*recall)/(precision+recall)
+
+
+print(knn9_table)
+cat("Accuracy is",x,"and misclassification rate is",100-x)
+cat("Precision is",precision,"and Recall is",recall)
+cat("F1 score is",F1)
+precrec_obj <- evalmod(scores = as.numeric(knn9), labels = y_test3)
+autoplot(precrec_obj)
+```
+### K fold cross validation with kcv=10
+```{r}
+set.seed(33)
+test3 = credit_default3
+y_test3=credit_default3[-tr3,24]
+n=dim(credit_default3)[1]
+k_list3=c(5,10,20,50,100,150)
+kcv = 10
+n0 = round(n/kcv,0)
+set=1:n
+used = NULL
+y1=matrix(0,kcv,6)
+y2=matrix(0,kcv,6)
+y3=matrix(0,kcv,6)
+for(j in 1:kcv){
+  if(n0<length(set)){val = sample(set,n0)}
+  if(n0>=length(set)){val=set}
+    train_i = train3[-val,]
+    test_i = test3[val,]
+    y_test_i=credit_default3[val,24]
+    for(i in 1:6){
+     knn10 = knn(train_i,test_i,cl=train_i$def_pay,k=k_list3[i])
+     knn10_table=table(knn10,y_test_i)
+     
+     x1=accuracy(knn10_table)
+     x2=100-x1
+     precision=posPredValue(knn10,y_test_i,positive='1')
+     recall=sensitivity(knn10,y_test_i,positive = '1')
+     F1=(2*precision*recall)/(precision+recall)
+     
+     cat(x2,"for k value",k_list3[i],"and fold",j)
+     y1[j,i]=x2
+     y2[j,i]=precision
+     y3[j,i]=recall
+    }
+  used = union(used,val)
+  set = (1:n)[-used]
+  cat(j,'\n')
+}  
+my1=apply(y1,2,mean)
+my2=apply(y2,2,mean)
+my3=apply(y3,2,mean)
+cat("Misclassification rate values:",my1)
+cat("Precision values:",my2)
+cat("Recall values:",my3)
+best = which.min(my1)
+plot(k_list3,my1,xlab="K value",ylab="Misclassification rate",col=4,lwd=2,type="l",cex.lab=1.2,main=paste("kfold(",kcv,")"))
+cat("Best k value is",k_list3[best],"with misclassification rate of",my1[best])
+```
